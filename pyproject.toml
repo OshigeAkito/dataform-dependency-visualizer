@@ -28,8 +28,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/thamo/dataform-dependency-visualizer"
-Repository = "https://github.com/thamo/dataform-dependency-visualizer"
+Homepage = "https://github.com/OshigeAkito/dataform-dependency-visualizer"
+Repository = "https://github.com/OshigeAkito/dataform-dependency-visualizer"
 
 [project.scripts]
 dataform-deps = "dataform_viz.cli:main"

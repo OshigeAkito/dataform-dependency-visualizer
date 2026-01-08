@@ -141,5 +141,5 @@ Contributions welcome! Please open an issue or PR on GitHub.
 
 ## Links
 
-- [GitHub Repository](https://github.com/yourusername/dataform-dependency-visualizer)
-- [Issue Tracker](https://github.com/yourusername/dataform-dependency-visualizer/issues)
+- [GitHub Repository](https://github.com/OshigeAkito/dataform-dependency-visualizer)
+- [Issue Tracker](https://github.com/OshigeAkito/dataform-dependency-visualizer/issues)
