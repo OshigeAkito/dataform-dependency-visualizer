@@ -1,0 +1,7 @@
+{
+  "defaultSchema": "my_dataset",
+  "assertionSchema": "my_dataset_assertions",
+  "warehouse": "bigquery",
+  "defaultDatabase": "my-gcp-project",
+  "defaultLocation": "US"
+}
