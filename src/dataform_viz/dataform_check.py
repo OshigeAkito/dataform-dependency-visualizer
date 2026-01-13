@@ -64,13 +64,28 @@ def cleanup_sqlx_files(definitions_dir="definitions", backup=True):
                 config_content = match.group(2)
                 suffix = match.group(3)
                 
-                # Remove *_utils.PROJECT_ID patterns from config content
+                # Check if database property contains *_utils.PROJECT_ID
+                has_project_id = re.search(r'database:\s*.*?\w+_utils\.PROJECT_ID', config_content)
+                
+                if has_project_id:
+                    # Remove entire database property line
+                    config_content = re.sub(r'\s*database:\s*[^,\n]*(?:,|\n|$)', '', config_content)
+                
+                # Also remove any remaining *_utils.PROJECT_ID patterns in other properties
                 # Pattern 1: ${<word>_utils.PROJECT_ID} with optional trailing dot
                 config_content = re.sub(r'\$\{\w+_utils\.PROJECT_ID\}\.?', '', config_content)
                 # Pattern 2: <word>_utils.PROJECT_ID with optional trailing dot
                 config_content = re.sub(r'\w+_utils\.PROJECT_ID\.?', '', config_content)
                 # Pattern 3: Backticks with ${<word>_utils.PROJECT_ID}
                 config_content = re.sub(r'`?\$\{\w+_utils\.PROJECT_ID\}`?\.?', '', config_content)
+                
+                # Clean up resulting syntax issues
+                # Remove double commas
+                config_content = re.sub(r',\s*,', ',', config_content)
+                # Remove trailing comma before closing brace
+                config_content = re.sub(r',(\s*)\}', r'\1}', config_content)
+                # Remove comma after opening brace
+                config_content = re.sub(r'\{\s*,', '{', config_content)
                 
                 return prefix + config_content + suffix
             
