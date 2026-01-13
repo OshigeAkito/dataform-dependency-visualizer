@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dataform-dependency-visualizer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Visualize Dataform table dependencies as interactive SVG diagrams"
 readme = "README_PACKAGE.md"
 authors = ["Thamo <thamo@example.com>"]
