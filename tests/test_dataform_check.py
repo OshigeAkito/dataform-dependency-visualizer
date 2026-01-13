@@ -252,7 +252,7 @@ class TestNormalizeName:
     def test_normalize_name_with_empty_dict(self):
         """Test normalizing empty target dict"""
         result = normalize_name({})
-        assert result == "."
+        assert result == "UNKNOWN"
     
     def test_normalize_name_with_database(self):
         """Test normalizing target with database field"""

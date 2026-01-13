@@ -1,7 +1,11 @@
 {
-  "defaultSchema": "my_dataset",
-  "assertionSchema": "my_dataset_assertions",
-  "warehouse": "bigquery",
-  "defaultDatabase": "my-gcp-project",
-  "defaultLocation": "US"
+    "warehouse": "bigquery",
+    "defaultSchema": "dataform",
+    "assertionSchema": "dataform_assertions",
+    "defaultDatabase": "gcp-pttep-th-it-wwim-dev",
+    "defaultLocation": "asia-southeast1",
+    "vars": {
+        "wwimProject": "gcp-pttep-th-it-wwim-dev",
+        "dpProject": "gcp-pttep-th-it-dp-dev"
+    }
 }

@@ -2,15 +2,20 @@
 
 Generate beautiful, interactive SVG diagrams showing dependencies between Dataform tables.
 
+![PyPI](https://img.shields.io/pypi/v/dataform-dependency-visualizer)
+![Python](https://img.shields.io/pypi/pyversions/dataform-dependency-visualizer)
+![License](https://img.shields.io/pypi/l/dataform-dependency-visualizer)
+
 ## Features
 
-- 📊 **Individual table diagrams** - One SVG per table showing immediate dependencies
-- 🎨 **Color-coded by type** - Tables, views, and operations visually distinct
-- 🔍 **Master index viewer** - Browse all tables in single interface
-- 📁 **Schema organization** - Organized by schema with collapsible sections
-- ⚡ **Pure Python SVGs** - No Graphviz required
-- 🎯 **Orthogonal routing** - Clean, professional arrow paths
-- 📝 **Smart text wrapping** - Long table names split across lines
+- 📊 **Interactive SVG Diagrams** - One diagram per table showing all dependencies
+- 🎨 **Color-Coded by Type** - Tables, views, and operations visually distinct
+- 🔍 **Master Index** - Browse all tables in a single HTML interface
+- 📁 **Schema Organization** - Automatically organized by database schema
+- ⚡ **Pure Python** - No Graphviz required, pure SVG generation
+- 🎯 **Smart Layout** - Clean orthogonal routing for professional diagrams
+- 📝 **Text Wrapping** - Long table names automatically wrapped
+- 🧹 **Cleanup Utilities** - Built-in tools to fix common Dataform issues
 
 ## Installation
 
@@ -18,86 +23,171 @@ Generate beautiful, interactive SVG diagrams showing dependencies between Datafo
 pip install dataform-dependency-visualizer
 ```
 
-## Quick Start
+## Prerequisites
 
-### 1. Generate dependency report
-
-In your Dataform project directory:
+You need **Dataform CLI** installed:
 
 ```bash
+# Install globally
+npm install -g @dataform/cli
+
+# Or in your project
+npm install @dataform/core
+```
+
+## Quick Start
+
+1. **Generate dependency report** from your Dataform project:
+
+```bash
+cd your-dataform-project
 dataform compile --json > dependencies_report.txt
 ```
 
-### 2. Generate SVG diagrams
+2. **Convert to text format** for visualization:
+
+```bash
+poetry run python -m dataform_viz.dataform_check > dependencies_text_report.txt
+```
+
+3. **Generate diagrams**:
+
+```bash
+# For all schemas
+dataform-deps --report dependencies_text_report.txt generate-all
+
+# For specific schema
+dataform-deps --report dependencies_text_report.txt generate dashboard
+
+# Generate browsable index
+dataform-deps --report dependencies_text_report.txt index
+```
+
+4. **View results**: Open `output/dependencies_master_index.html` in your browser
+
+## Command Reference
 
 ```bash
 # Generate for specific schema
-dataform-deps generate dashboard_wwim
+dataform-deps --report FILE generate SCHEMA_NAME
 
-# Generate for all schemas (excluding refined_*)
-dataform-deps generate-all
+# Generate all schemas
+dataform-deps --report FILE generate-all
 
 # Generate master index
-dataform-deps index
+dataform-deps --report FILE index
+
+# Open index in browser
+dataform-deps --report FILE index --open
+
+# Custom output directory
+dataform-deps --report FILE --output my_output generate-all
+
+# Cleanup Dataform issues
+python -m dataform_viz.dataform_check --cleanup
 ```
 
-### 3. View diagrams
+## Python API
 
-Open `output/dependencies_master_index.html` in your browser to browse all tables and their dependencies.
+```python
+from dataform_viz import DependencyVisualizer
 
-## Usage
+# Initialize with report
+viz = DependencyVisualizer('dependencies_text_report.txt')
+viz.load_report()
 
-### Command Line
+# Generate for specific schema
+count = viz.generate_schema_svgs('dashboard', output_dir='output')
 
-**Generate diagrams for a specific schema:**
+# Generate for all schemas
+total = viz.generate_all_svgs(output_dir='output')
+
+# Generate master index
+viz.generate_master_index('output')
+```
+
+## Output Structure
+
+```
+output/
+├── dependencies_master_index.html  # Interactive browser interface
+├── analytics/
+│   └── analytics_customer_summary.svg
+├── dashboard_wwim/
+│   ├── dashboard_wwim_table1.svg
+│   └── ...
+└── datamart_wwim/
+    └── ...
+```
+
+## Understanding the Diagrams
+
+Each SVG shows:
+- **Center (Yellow)**: The table being viewed
+- **Left (Blue)**: Dependencies - tables this reads FROM
+- **Right (Green)**: Dependents - tables that read FROM this
+- **Schema Labels**: Shows schema for each table
+- **Type Badges**: table, view, incremental, operation
+
+## Cleanup Utilities
+
+Fix common Dataform compilation issues:
 
 ```bash
-dataform-deps generate SCHEMA_NAME
+python -m dataform_viz.dataform_check --cleanup
 ```
 
-Example:
+This removes:
+- `database:` lines from config blocks
+- `database:` from `ref()` calls
+- Replaces constant references with actual values
+- Cleans up dependencies.js files
+
+## Common Issues
+
+### "wwim_utils is not defined"
+
+Run the cleanup utility:
 ```bash
-dataform-deps generate dashboard_wwim
+python -m dataform_viz.dataform_check --cleanup
 ```
 
-**Generate for all schemas:**
+### Empty SVG output
 
+Use text format report, not JSON:
 ```bash
-dataform-deps generate-all
+python -m dataform_viz.dataform_check > dependencies_text_report.txt
 ```
 
-By default, schemas starting with `refined_` are excluded. To include them:
+## Requirements
 
-```bash
-dataform-deps generate-all --include-refined
-```
+- Python 3.10+
+- Dataform CLI
+- Node.js (to run Dataform)
 
-**Generate master index:**
+## Links
 
-```bash
-dataform-deps index
-```
+- **GitHub**: [https://github.com/OshigeAkito/dataform-dependency-visualizer](https://github.com/OshigeAkito/dataform-dependency-visualizer)
+- **Documentation**: [GitHub README](https://github.com/OshigeAkito/dataform-dependency-visualizer#readme)
+- **Issues**: [GitHub Issues](https://github.com/OshigeAkito/dataform-dependency-visualizer/issues)
 
-Creates `output/dependencies_master_index.html` with links to all tables.
+## License
 
-**Check prerequisites:**
+MIT License - See LICENSE file for details.
 
-```bash
-dataform-deps check
-```
+## Changelog
 
-Verifies that:
-- You're in a Dataform project directory
-- `dependencies_report.txt` exists
-- The report contains valid dependency data
+### v0.2.0 (2026-01-13)
+- Added cleanup utility for database references
+- Added constant replacement functionality
+- Improved error handling
+- Enhanced documentation
 
-## Example Output
-
-### Individual Table Diagram
-
-Each table gets its own SVG showing:
-- **Dependencies (upstream)** - Tables this table depends on
-- **Dependents (downstream)** - Tables that depend on this table
+### v0.1.0
+- Initial release
+- Basic SVG generation
+- Master index generator
+- Command-line interface
 - **Color coding** - Tables (blue), views (green), operations (orange)
 
 ### Master Index

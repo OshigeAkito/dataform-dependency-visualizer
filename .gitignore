@@ -41,3 +41,6 @@ Thumbs.db
 output/
 dependencies_report.txt
 *.log
+
+# Example project (not part of package)
+example-project/
