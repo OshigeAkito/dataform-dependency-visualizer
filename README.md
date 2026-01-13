@@ -12,6 +12,22 @@ Generate beautiful, interactive SVG diagrams showing dependencies between Datafo
 - 🎯 **Orthogonal routing** - Clean, professional arrow paths
 - 📝 **Smart text wrapping** - Long table names split across 2 lines
 
+## Prerequisites
+
+- **Python 3.10+**
+- **Node.js** and **Dataform CLI** (for generating dependency reports)
+
+### Installing Dataform CLI
+
+```bash
+# Install globally
+npm install -g @dataform/cli
+
+# Or install in your Dataform project
+cd your-dataform-project
+npm install @dataform/core
+```
+
 ## Installation
 
 ```bash
