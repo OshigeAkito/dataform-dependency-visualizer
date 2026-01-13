@@ -63,6 +63,25 @@ def cmd_index(args):
         return 1
 
 
+def cmd_cleanup(args):
+    """Clean up .sqlx files before compilation"""
+    from .dataform_check import cleanup_sqlx_files
+    
+    try:
+        cleaned = cleanup_sqlx_files(
+            definitions_dir=args.definitions,
+            backup=not args.no_backup
+        )
+        
+        if cleaned > 0:
+            print(f"\n✓ Ready for dataform compile --json")
+        
+        return 0
+    except Exception as e:
+        print(f"✗ Error: {e}", file=sys.stderr)
+        return 1
+
+
 def cmd_setup(args):
     """Full setup pipeline"""
     from .dataform_check import check_prerequisites
@@ -136,6 +155,20 @@ def main():
         help='Open index in browser'
     )
     idx_parser.set_defaults(func=cmd_index)
+    
+    # Cleanup command
+    cleanup_parser = subparsers.add_parser('cleanup', help='Clean up .sqlx files (remove *_utils.PROJECT_ID from config)')
+    cleanup_parser.add_argument(
+        '--definitions',
+        default='definitions',
+        help='Path to definitions directory (default: definitions)'
+    )
+    cleanup_parser.add_argument(
+        '--no-backup',
+        action='store_true',
+        help='Skip creating .bak backup files'
+    )
+    cleanup_parser.set_defaults(func=cmd_cleanup)
     
     # Setup command
     setup_parser = subparsers.add_parser('setup', help='Full setup pipeline')

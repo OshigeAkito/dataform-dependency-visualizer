@@ -2,6 +2,173 @@ import subprocess
 import json
 import sys
 import os
+import re
+from pathlib import Path
+
+def cleanup_sqlx_files(definitions_dir="definitions", backup=True):
+    """
+    Clean up .sqlx files by removing *_utils.PROJECT_ID references in config section only.
+    
+    Removes patterns like:
+    - ${<any>_utils.PROJECT_ID}
+    - <any>_utils.PROJECT_ID
+    - `${<any>_utils.PROJECT_ID}`
+    
+    Only processes the config {...} block, leaving SQL queries untouched.
+    
+    Args:
+        definitions_dir: Path to the definitions directory containing .sqlx files
+        backup: Whether to create .bak backup files before cleaning
+        
+    Returns:
+        Number of files cleaned
+    """
+    definitions_path = Path(definitions_dir)
+    
+    if not definitions_path.exists():
+        print(f"Warning: Directory '{definitions_dir}' not found")
+        return 0
+    
+    sqlx_files = list(definitions_path.rglob("*.sqlx"))
+    
+    if not sqlx_files:
+        print(f"No .sqlx files found in '{definitions_dir}'")
+        return 0
+    
+    cleaned_count = 0
+    
+    for sqlx_file in sqlx_files:
+        try:
+            # Read file with multiple encoding attempts
+            content = None
+            for encoding in ['utf-8', 'utf-16', 'cp1252', 'latin-1']:
+                try:
+                    with open(sqlx_file, 'r', encoding=encoding) as f:
+                        content = f.read()
+                    break
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+            
+            if content is None:
+                print(f"Warning: Could not read {sqlx_file.name}")
+                continue
+            
+            original_content = content
+            
+            # Find config block using regex
+            config_pattern = r'(config\s*\{)(.*?)(\})'
+            
+            def clean_config_block(match):
+                """Clean <any>_utils.PROJECT_ID from config block only"""
+                prefix = match.group(1)
+                config_content = match.group(2)
+                suffix = match.group(3)
+                
+                # Remove *_utils.PROJECT_ID patterns from config content
+                # Pattern 1: ${<word>_utils.PROJECT_ID} with optional trailing dot
+                config_content = re.sub(r'\$\{\w+_utils\.PROJECT_ID\}\.?', '', config_content)
+                # Pattern 2: <word>_utils.PROJECT_ID with optional trailing dot
+                config_content = re.sub(r'\w+_utils\.PROJECT_ID\.?', '', config_content)
+                # Pattern 3: Backticks with ${<word>_utils.PROJECT_ID}
+                config_content = re.sub(r'`?\$\{\w+_utils\.PROJECT_ID\}`?\.?', '', config_content)
+                
+                return prefix + config_content + suffix
+            
+            # Replace only in config blocks
+            content = re.sub(config_pattern, clean_config_block, content, flags=re.DOTALL)
+            
+            # Remove trailing whitespace from lines
+            lines = content.split('\n')
+            lines = [line.rstrip() for line in lines]
+            
+            # Remove excessive blank lines (keep max 2 consecutive)
+            cleaned_lines = []
+            blank_count = 0
+            for line in lines:
+                if line.strip() == '':
+                    blank_count += 1
+                    if blank_count <= 2:
+                        cleaned_lines.append(line)
+                else:
+                    blank_count = 0
+                    cleaned_lines.append(line)
+            
+            # Ensure file ends with single newline
+            content = '\n'.join(cleaned_lines)
+            if content and not content.endswith('\n'):
+                content += '\n'
+            
+            # Remove BOM if present
+            content = content.lstrip('\ufeff')
+            
+            # Only write if content changed
+            if content != original_content:
+                if backup:
+                    backup_file = sqlx_file.with_suffix('.sqlx.bak')
+                    with open(backup_file, 'w', encoding='utf-8') as f:
+                        f.write(original_content)
+                
+                with open(sqlx_file, 'w', encoding='utf-8', newline='\n') as f:
+                    f.write(content)
+                
+                cleaned_count += 1
+                print(f"✓ Cleaned: {sqlx_file.name}")
+        
+        except Exception as e:
+            print(f"✗ Error cleaning {sqlx_file.name}: {e}")
+    
+    print(f"\nCleaned {cleaned_count} of {len(sqlx_files)} .sqlx files")
+    return cleaned_count
+
+def check_prerequisites():
+    """
+    Check if required tools are available
+    
+    Returns:
+        bool: True if all prerequisites are met
+    """
+    print("\nChecking prerequisites...")
+    
+    # Check for Node.js
+    try:
+        result = subprocess.run(['node', '--version'], 
+                              capture_output=True, 
+                              text=True,
+                              shell=True)
+        if result.returncode == 0:
+            print(f"✓ Node.js: {result.stdout.strip()}")
+        else:
+            print("✗ Node.js not found")
+            return False
+    except Exception:
+        print("✗ Node.js not found")
+        return False
+    
+    # Check for Dataform
+    try:
+        # Try local installation first
+        local_bin = os.path.join(os.getcwd(), "node_modules", ".bin", "dataform.cmd")
+        if os.path.exists(local_bin):
+            print(f"✓ Dataform: local installation found")
+            return True
+        
+        # Try npx dataform
+        result = subprocess.run(['npx', 'dataform', '--version'],
+                              capture_output=True,
+                              text=True,
+                              shell=True,
+                              timeout=10)
+        if result.returncode == 0:
+            print(f"✓ Dataform: available via npx")
+            return True
+        else:
+            print("✗ Dataform not found")
+            print("  Install with: npm install -g @dataform/cli")
+            return False
+    except Exception as e:
+        print("✗ Dataform not found or not accessible")
+        print("  Install with: npm install -g @dataform/cli")
+        return False
 
 def get_dataform_graph():
     print("Compiling Dataform graph (this may take a moment)...")
