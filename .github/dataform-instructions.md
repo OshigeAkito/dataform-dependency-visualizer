@@ -1,4 +1,4 @@
-# Copilot Instructions for Dataform Dependency Visualizer
+# Dataform Dependency Visualizer Instructions
 
 ## Project Overview
 Python CLI tool that generates interactive SVG dependency diagrams for Dataform BigQuery projects. Parses Dataform's compiled JSON output and creates per-table visualizations showing upstream dependencies and downstream dependents, organized by schema.
