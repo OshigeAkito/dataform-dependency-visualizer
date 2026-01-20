@@ -11,6 +11,7 @@ def parse_dependencies_report(report_path):
     """Parse the dependencies_report.txt file"""
     tables = {}
     current_table = None
+    current_dep = None
     
     # Try different encodings
     encodings = ['utf-8', 'utf-16', 'cp1252', 'latin-1']
@@ -36,10 +37,12 @@ def parse_dependencies_report(report_path):
             table_name = table_match.group(1)
             table_type = table_match.group(2)
             current_table = table_name
+            current_dep = None
             tables[current_table] = {
                 'type': table_type,
                 'dependencies': [],
-                'dependents': []
+                'dependents': [],
+                'join_info': {}
             }
             continue
         
@@ -48,12 +51,27 @@ def parse_dependencies_report(report_path):
             dep = line.strip().replace('<- ', '').strip()
             if dep:
                 tables[current_table]['dependencies'].append(dep)
+                current_dep = dep
+        
+        # Match join info line (indented further, contains JOIN and ON)
+        elif current_table and current_dep and 'JOIN' in line and 'ON' in line:
+            join_line = line.strip()
+            # Parse join info: "LEFT JOIN ON condition"
+            join_match = re.match(r'(\w+\s+JOIN)\s+ON\s+(.+)', join_line)
+            if join_match:
+                join_type = join_match.group(1)
+                join_condition = join_match.group(2)
+                tables[current_table]['join_info'][current_dep] = {
+                    'type': join_type,
+                    'condition': join_condition
+                }
         
         # Match dependent line
-        if current_table and '->' in line:
+        elif current_table and '->' in line:
             dep = line.strip().replace('-> ', '').strip()
             if dep:
                 tables[current_table]['dependents'].append(dep)
+                current_dep = None
     
     return tables
 
@@ -159,6 +177,8 @@ def generate_svg_manual(table_name, table_info, all_tables, svg_file):
         '  <style>',
         '    .node-text { font-family: Arial, sans-serif; font-size: 12px; fill: #333; }',
         '    .type-badge { font-family: Arial, sans-serif; font-size: 10px; fill: #666; }',
+        '    .join-label { font-family: Arial, sans-serif; font-size: 10px; font-weight: bold; }',
+        '    .join-condition { font-family: Arial, sans-serif; font-size: 9px; }',
         '  </style>',
     ]
     
@@ -225,6 +245,29 @@ def generate_svg_manual(table_name, table_info, all_tables, svg_file):
         # Type badge
         badge_y = pos['y'] + 20 if schema_name else pos['y'] + 15
         svg_lines.append(f'  <text x="{pos["x"]}" y="{badge_y}" text-anchor="middle" class="type-badge">{pos["type"]}</text>')
+        
+        # Add JOIN information below dependency nodes (not the target table)
+        if node_name != table_name and node_name in dependencies:
+            join_info = table_info.get('join_info', {}).get(node_name)
+            if join_info:
+                join_y = pos['y'] + node_height // 2 + 15
+                join_text = f"{join_info['type']}"
+                
+                # Truncate condition if too long
+                condition = join_info['condition']
+                if len(condition) > 35:
+                    condition = condition[:32] + '...'
+                
+                # Draw JOIN type
+                text_width = len(join_text) * 6
+                svg_lines.append(f'  <rect x="{pos["x"] - text_width//2 - 4}" y="{join_y - 12}" width="{text_width + 8}" height="14" fill="white" opacity="0.9" rx="2" />')
+                svg_lines.append(f'  <text x="{pos["x"]}" y="{join_y}" text-anchor="middle" class="join-label" fill="#d32f2f">{join_text}</text>')
+                
+                # Draw JOIN condition on second line
+                join_y += 16
+                cond_width = len(condition) * 5
+                svg_lines.append(f'  <rect x="{pos["x"] - cond_width//2 - 4}" y="{join_y - 12}" width="{cond_width + 8}" height="14" fill="white" opacity="0.9" rx="2" />')
+                svg_lines.append(f'  <text x="{pos["x"]}" y="{join_y}" text-anchor="middle" class="join-condition" fill="#666">{condition}</text>')
     
     svg_lines.append('</svg>')
     
