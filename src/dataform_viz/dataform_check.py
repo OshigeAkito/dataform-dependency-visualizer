@@ -269,10 +269,213 @@ def normalize_name(target):
         return "UNKNOWN"
     return f"{target.get('schema', '')}.{target.get('name', '')}"
 
+def parse_joins_from_query(query, dependencies):
+    """Extract JOIN information from SQL query.
+    
+    Args:
+        query: SQL query string
+        dependencies: List of dependency target objects
+        
+    Returns:
+        Dictionary mapping dependency name to join info: {dep_name: {'type': 'LEFT JOIN', 'condition': 'a.id = b.id'}}
+    """
+    if not query:
+        return {}
+    
+    join_info = {}
+    
+    # Normalize query - remove backticks and newlines for easier parsing
+    query_normalized = query.replace('`', '').replace('\n', ' ').replace('\r', '')
+    
+    # Extract CTE definitions to map CTE names to their source tables
+    # For CTEs with complex content (window functions, nested parentheses), we need a better approach
+    # Pattern: WITH cte_name AS (... FROM schema.table_name ...)
+    cte_to_source = {}  # Maps CTE name to source table
+    
+    # Find all CTE definitions (WITH or , followed by cte_name AS ()
+    cte_start_pattern = r'(?:WITH|,)\s+(\w+)\s+AS\s*\('
+    cte_starts = list(re.finditer(cte_start_pattern, query_normalized, re.IGNORECASE))
+    
+    for i, match in enumerate(cte_starts):
+        cte_name = match.group(1).strip()
+        start_pos = match.end()  # Position after the opening (
+        
+        # Find the closing parenthesis for this CTE by tracking paren depth
+        paren_depth = 1
+        pos = start_pos
+        cte_end_pos = start_pos
+        
+        while pos < len(query_normalized) and paren_depth > 0:
+            if query_normalized[pos] == '(':
+                paren_depth += 1
+            elif query_normalized[pos] == ')':
+                paren_depth -= 1
+                if paren_depth == 0:
+                    cte_end_pos = pos
+                    break
+            pos += 1
+        
+        # Extract the CTE content
+        cte_content = query_normalized[start_pos:cte_end_pos]
+        
+        # Look for FROM clauses in the CTE content
+        # Pattern: FROM schema.table_name or FROM table_name
+        from_pattern = r'FROM\s+([\w.-]+)'
+        from_matches = list(re.finditer(from_pattern, cte_content, re.IGNORECASE))
+        
+        if from_matches:
+            # Use the first FROM clause (primary table)
+            source_table = from_matches[0].group(1).strip()
+            cte_to_source[cte_name.lower()] = source_table
+    
+    # Recursively resolve CTEs that reference other CTEs
+    # (e.g., annulus_level -> extracted_casing_size -> refined_wisdom_v_csg_tbg)
+    max_iterations = 10  # Prevent infinite loops
+    for _ in range(max_iterations):
+        resolved_any = False
+        for cte_name, source_table in list(cte_to_source.items()):
+            # Check if source_table is itself a CTE
+            if source_table.lower() in cte_to_source:
+                # Resolve it
+                cte_to_source[cte_name] = cte_to_source[source_table.lower()]
+                resolved_any = True
+        if not resolved_any:
+            break
+    
+    # Build list of dependency table names to look for
+    dep_names = []
+    dep_name_parts = []  # Store partial name matches for CTEs
+    for dep in dependencies:
+        if isinstance(dep, dict):
+            schema = dep.get('schema', '')
+            name = dep.get('name', '')
+            full_name = f"{schema}.{name}"
+            dep_names.append((full_name, full_name))
+            # Also add just the table name for matching
+            dep_names.append((name, full_name))
+            # Add partial name matching for CTEs (e.g., union_a_ann_barrier -> a_ann_barrier)
+            if '_' in name:
+                parts = name.split('_')
+                # Try various partial combinations
+                if name.startswith('union_'):
+                    # For union_xxx patterns, match xxx
+                    cte_name = name.replace('union_', '')
+                    dep_names.append((cte_name, full_name))
+                # Try last few parts joined (for patterns like union_a_ann_barrier -> a_ann_barrier)
+                if len(parts) > 2:
+                    for i in range(1, len(parts)):
+                        partial = '_'.join(parts[i:])
+                        dep_names.append((partial, full_name))
+    
+    # Regex pattern to match JOIN clauses with ON
+    # Captures: (join_type) table_ref [alias] ON condition
+    join_on_pattern = r'((?:INNER|LEFT|RIGHT|FULL|CROSS)?\s*(?:OUTER)?\s*JOIN)\s+([\w.-]+)(?:\s+(?:AS\s+)?([\w]+))?\s+ON\s+([^\r\n]+?)(?=\s+(?:WHERE|GROUP|HAVING|ORDER|LIMIT|UNION|FROM|SELECT|INNER\s+JOIN|LEFT\s+JOIN|RIGHT\s+JOIN|FULL\s+JOIN|CROSS\s+JOIN|JOIN|\)|;)\s*|$)'
+    
+    # Regex pattern to match JOIN clauses with USING
+    # Captures: (join_type) table_ref [alias] USING (columns)
+    join_using_pattern = r'((?:INNER|LEFT|RIGHT|FULL|CROSS)?\s*(?:OUTER)?\s*JOIN)\s+([\w.-]+)(?:\s+(?:AS\s+)?([\w]+))?\s+USING\s*\(([^)]+)\)'
+    
+    # Process ON joins
+    matches = re.finditer(join_on_pattern, query_normalized, re.IGNORECASE)
+    
+    # Debug: Count matches
+    match_list = list(matches)
+    if len(match_list) > 0:
+        print(f"DEBUG parse_joins: Found {len(match_list)} ON joins in query")
+    matches = iter(match_list)  # Convert back to iterator
+    
+    for match in matches:
+        join_type = match.group(1).strip().upper()  # e.g., "LEFT JOIN"
+        table_ref = match.group(2).strip()  # e.g., "schema.table_name" or "table_name"
+        # alias = match.group(3)  # Optional alias
+        condition = match.group(4).strip() if match.group(4) else ""  # ON condition
+        
+        # Check if table_ref is a CTE - if so, resolve it to the actual source table
+        resolved_table_ref = table_ref
+        if table_ref.lower() in cte_to_source:
+            resolved_table_ref = cte_to_source[table_ref.lower()]
+        
+        # Normalize resolved_table_ref - remove database prefix (e.g., database.schema.table -> schema.table)
+        # Format: database-name.schema.table or just schema.table
+        resolved_parts = resolved_table_ref.split('.')
+        if len(resolved_parts) == 3:
+            # Has database prefix, remove it
+            resolved_table_ref = f"{resolved_parts[1]}.{resolved_parts[2]}"
+        
+        # Try to match this table_ref to one of our dependencies
+        matched_dep = None
+        best_match_len = 0
+        
+        for search_name, full_dep_name in dep_names:
+            # Check if the search_name matches the resolved table_ref in the JOIN
+            # Use case-insensitive comparison and check both directions
+            if (search_name.lower() in resolved_table_ref.lower() or 
+                resolved_table_ref.lower() in search_name.lower() or
+                search_name.lower() == resolved_table_ref.lower()):
+                # Prefer longer matches (more specific)
+                if len(search_name) > best_match_len:
+                    matched_dep = full_dep_name
+                    best_match_len = len(search_name)
+        
+        if matched_dep and condition:
+            # Clean up condition - remove extra whitespace
+            condition = ' '.join(condition.split())
+            join_info[matched_dep] = {
+                'type': join_type,
+                'condition': condition
+            }
+            # Debug output
+            print(f"DEBUG: Matched JOIN: {join_type} {table_ref} -> {matched_dep}")
+    
+    # Process USING joins
+    matches = re.finditer(join_using_pattern, query_normalized, re.IGNORECASE)
+    
+    for match in matches:
+        join_type = match.group(1).strip().upper()  # e.g., "LEFT JOIN"
+        table_ref = match.group(2).strip()  # e.g., "schema.table_name" or "table_name"
+        # alias = match.group(3)  # Optional alias
+        columns = match.group(4).strip() if match.group(4) else ""  # USING columns
+        
+        # Check if table_ref is a CTE - if so, resolve it to the actual source table
+        resolved_table_ref = table_ref
+        if table_ref.lower() in cte_to_source:
+            resolved_table_ref = cte_to_source[table_ref.lower()]
+        
+        # Normalize resolved_table_ref - remove database prefix (e.g., database.schema.table -> schema.table)
+        resolved_parts = resolved_table_ref.split('.')
+        if len(resolved_parts) == 3:
+            # Has database prefix, remove it
+            resolved_table_ref = f"{resolved_parts[1]}.{resolved_parts[2]}"
+        
+        # Try to match this table_ref to one of our dependencies
+        matched_dep = None
+        best_match_len = 0
+        
+        for search_name, full_dep_name in dep_names:
+            if (search_name.lower() in resolved_table_ref.lower() or 
+                resolved_table_ref.lower() in search_name.lower() or
+                search_name.lower() == resolved_table_ref.lower()):
+                if len(search_name) > best_match_len:
+                    matched_dep = full_dep_name
+                    best_match_len = len(search_name)
+        
+        if matched_dep and columns:
+            # Format as "USING (columns)"
+            condition = f"USING ({columns})"
+            join_info[matched_dep] = {
+                'type': join_type,
+                'condition': condition
+            }
+    
+    return join_info
+
 def main():
+    print("DEBUG: main() started")
     graph = get_dataform_graph()
     if not graph:
+        print("DEBUG: No graph returned from get_dataform_graph")
         return
+    print("DEBUG: Graph loaded successfully")
 
     tables = graph.get("tables", [])
     
@@ -288,13 +491,23 @@ def main():
         full_name = normalize_name(tgt) # e.g. "dataset.table"
         short_name = tgt.get("name")
         
+        # Get dependencies
+        deps = t.get("dependencyTargets", [])
+        query = t.get("query", "")
+        
+        # Debug: Check if query exists for specific table
+        if 'cmt_perf' in short_name:
+            print(f"DEBUG main: Processing {full_name}, query length: {len(query)}, deps: {len(deps)}")
+        
+        # Parse JOIN information from query
+        join_info = parse_joins_from_query(query, deps)
+        
         # Store using full name as key
         table_lookup[full_name] = {
             "type": t.get("type"),
-            "dependencies": t.get("dependencyTargets", []), # dataform 2.x often uses dependencyTargets (objects) or dependencies (strings)
-            # recent dataform versions might strictly use dependencyTargets. Let's check both or inspect.
-            # If dependencyTargets matches the current structure, otherwise fallback.
-            "dependents": []
+            "dependencies": deps,
+            "dependents": [],
+            "join_info": join_info
         }
         
         # Also store short name pointer if it doesn't conflict? 
@@ -337,7 +550,14 @@ def main():
             deps = info['dependencies']
             print(f"  Dependencies ({len(deps)}):")
             for d in deps:
-                print(f"    <- {normalize_name(d)}")
+                dep_name = normalize_name(d)
+                print(f"    <- {dep_name}")
+                
+                # Print JOIN information if available
+                join_info = info.get('join_info', {})
+                if dep_name in join_info:
+                    j = join_info[dep_name]
+                    print(f"      {j['type']} ON {j['condition']}")
                 
             depts = info['dependents']
             print(f"  Dependents ({len(depts)}):")

@@ -246,7 +246,7 @@ def generate_svg_manual(table_name, table_info, all_tables, svg_file):
         badge_y = pos['y'] + 20 if schema_name else pos['y'] + 15
         svg_lines.append(f'  <text x="{pos["x"]}" y="{badge_y}" text-anchor="middle" class="type-badge">{pos["type"]}</text>')
         
-        # Add JOIN information below dependency nodes (not the target table)
+        # Add JOIN information below dependency nodes (not the center table)
         if node_name != table_name and node_name in dependencies:
             join_info = table_info.get('join_info', {}).get(node_name)
             if join_info:

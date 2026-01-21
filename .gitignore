@@ -45,3 +45,8 @@ dependencies_report.txt
 # Example project (not part of package)
 example-project/
 Example Project/
+example_project/
+
+# Test files
+test_cte_parsing.py
+test_output/

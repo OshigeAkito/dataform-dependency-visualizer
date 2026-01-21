@@ -10,7 +10,8 @@ Generate beautiful, interactive SVG diagrams showing dependencies between Datafo
 
 - 📊 **Interactive SVG Diagrams** - Visualize dependencies for each table
 - 🎨 **Color-Coded** - Tables (blue), views (green), operations (orange)
-- 🔍 **Master Index** - Browse all tables in one HTML interface
+- � **JOIN Details** - Shows JOIN types and ON conditions for each dependency
+- �🔍 **Master Index** - Browse all tables in one HTML interface
 - 📁 **Schema Organization** - Automatically organized by database schema
 - ⚡ **Pure Python** - No Graphviz required
 
@@ -93,10 +94,11 @@ viz.generate_master_index('output')
 Each SVG diagram shows:
 
 - **Center (Yellow)**: The table being viewed
-- **Left (Blue)**: Dependencies - tables this reads FROM
+- **Left (Blue)**: Dependencies - tables this reads FROM, with JOIN details shown below each
 - **Right (Green)**: Dependents - tables that read FROM this
 - **Schema Labels**: Database schema for each table
 - **Type Badges**: table, view, incremental, operation
+- **JOIN Information**: Type (LEFT/INNER/RIGHT JOIN) and ON conditions displayed in red below dependency nodes
 
 ## Output Structure
 
@@ -157,6 +159,12 @@ MIT License - See [LICENSE](LICENSE) file
 - **PyPI**: https://pypi.org/project/dataform-dependency-visualizer/
 
 ## Changelog
+
+### v0.2.3 (2026-01-21)
+- **NEW**: JOIN information extraction from SQL queries
+- Display JOIN types (LEFT, INNER, RIGHT, etc.) and ON conditions in SVG diagrams
+- JOIN count summary shown on center table
+- Detailed JOIN info displayed below each dependency node
 
 ### v0.2.0 (2026-01-13)
 - Added cleanup utility for database references
